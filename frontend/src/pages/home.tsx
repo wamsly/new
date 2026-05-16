@@ -5,17 +5,39 @@ import {
   getListActivePollsPublicQueryKey,
   getListPollsQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { CalendarClock, ShieldCheck, Vote, ArrowRight, LogIn, UserPlus, Lock } from "lucide-react";
+import {
+  CalendarClock,
+  ShieldCheck,
+  Vote,
+  ArrowRight,
+  LogIn,
+  UserPlus,
+  Lock,
+} from "lucide-react";
 
 function format(d: string) {
-  return new Date(d).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
+  const date = new Date(d);
+  const eat = new Date(date.getTime() + 3 * 60 * 60 * 1000);
+  return eat.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
   });
 }
 
@@ -27,7 +49,11 @@ function StatusBadge({ status }: { status: string }) {
   };
   return (
     <Badge variant="outline" className={`${map[status] ?? ""} font-medium`}>
-      {status === "active" ? "Voting Open" : status === "upcoming" ? "Upcoming" : "Closed"}
+      {status === "active"
+        ? "Voting Open"
+        : status === "upcoming"
+          ? "Upcoming"
+          : "Closed"}
     </Badge>
   );
 }
@@ -35,13 +61,22 @@ function StatusBadge({ status }: { status: string }) {
 export default function Home() {
   const { isAuthenticated } = useAuth();
   const publicPolls = useListActivePollsPublic({
-    query: { enabled: !isAuthenticated, queryKey: getListActivePollsPublicQueryKey() },
+    query: {
+      enabled: !isAuthenticated,
+      queryKey: getListActivePollsPublicQueryKey(),
+    },
   });
   const userPolls = useListPolls({
     query: { enabled: isAuthenticated, queryKey: getListPollsQueryKey() },
   });
-  const polls = ((isAuthenticated ? userPolls.data ?? [] : publicPolls.data ?? []) as any[]).filter(Boolean);
-  const isLoading = isAuthenticated ? userPolls.isLoading : publicPolls.isLoading;
+  const polls = (
+    (isAuthenticated
+      ? (userPolls.data ?? [])
+      : (publicPolls.data ?? [])) as any[]
+  ).filter(Boolean);
+  const isLoading = isAuthenticated
+    ? userPolls.isLoading
+    : publicPolls.isLoading;
   const safeDate = (value: unknown) => {
     const d = new Date(String(value ?? ""));
     return Number.isNaN(d.getTime()) ? "Unavailable" : format(String(value));
@@ -68,7 +103,10 @@ export default function Home() {
               KUSA E-Voting <span className="text-primary">System</span>
             </h1>
             <p className="mt-6 text-base leading-relaxed text-secondary-foreground/85 md:text-lg">
-              WELCOME TO KUSA VOTING E-VOTING SYSTEM, WHERE YOU GET A CHANCE TO VOTE LEADERS OF YOUR CHOICE. Cast your vote, make it count. NOTE that your vote is strictly confidential and can only be submitted once.
+              WELCOME TO KUSA VOTING E-VOTING SYSTEM, WHERE YOU GET A CHANCE TO
+              VOTE LEADERS OF YOUR CHOICE. Cast your vote, make it count. NOTE
+              that your vote is strictly confidential and can only be submitted
+              once.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               {isAuthenticated ? (
@@ -85,12 +123,20 @@ export default function Home() {
                     </Button>
                   </Link>
                   <Link href="/register">
-                    <Button size="lg" variant="secondary" className="gap-2 bg-secondary-foreground/10 text-secondary-foreground border border-secondary-foreground/20 hover:bg-secondary-foreground/20">
+                    <Button
+                      size="lg"
+                      variant="secondary"
+                      className="gap-2 bg-secondary-foreground/10 text-secondary-foreground border border-secondary-foreground/20 hover:bg-secondary-foreground/20"
+                    >
                       <UserPlus className="h-4 w-4" /> Register
                     </Button>
                   </Link>
                   <Link href="/admin/login">
-                    <Button size="lg" variant="ghost" className="gap-2 text-secondary-foreground hover:bg-secondary-foreground/10">
+                    <Button
+                      size="lg"
+                      variant="ghost"
+                      className="gap-2 text-secondary-foreground hover:bg-secondary-foreground/10"
+                    >
                       <ShieldCheck className="h-4 w-4" /> Admin
                     </Button>
                   </Link>
@@ -103,7 +149,10 @@ export default function Home() {
                 { Icon: Lock, label: "One vote per seat" },
                 { Icon: Vote, label: "Verified KU email" },
               ].map(({ Icon, label }) => (
-                <div key={label} className="flex items-center gap-2 rounded-lg border border-secondary-foreground/15 bg-secondary-foreground/5 p-3 text-sm">
+                <div
+                  key={label}
+                  className="flex items-center gap-2 rounded-lg border border-secondary-foreground/15 bg-secondary-foreground/5 p-3 text-sm"
+                >
                   <Icon className="h-4 w-4 text-primary" />
                   <span>{label}</span>
                 </div>
@@ -128,7 +177,10 @@ export default function Home() {
         {isLoading && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-48 animate-pulse rounded-xl bg-muted/40" />
+              <div
+                key={i}
+                className="h-48 animate-pulse rounded-xl bg-muted/40"
+              />
             ))}
           </div>
         )}
@@ -136,9 +188,12 @@ export default function Home() {
           <Card className="bg-card/60">
             <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
               <CalendarClock className="h-10 w-10 text-muted-foreground" />
-              <p className="text-base font-medium">No active polls right now.</p>
+              <p className="text-base font-medium">
+                No active polls right now.
+              </p>
               <p className="text-sm text-muted-foreground">
-                Check back soon — KUSA elections are announced here as soon as they open.
+                Check back soon — KUSA elections are announced here as soon as
+                they open.
               </p>
             </CardContent>
           </Card>
@@ -154,7 +209,9 @@ export default function Home() {
               <Card className="h-full border-border/80 hover:border-primary/40 transition-colors">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-lg leading-snug">{p.title}</CardTitle>
+                    <CardTitle className="text-lg leading-snug">
+                      {p.title}
+                    </CardTitle>
                     <StatusBadge status={p.status} />
                   </div>
                   <CardDescription className="line-clamp-2">
@@ -172,8 +229,17 @@ export default function Home() {
                   </div>
                   {isAuthenticated && (
                     <div className="pt-1">
-                      <Badge variant={p.hasVotedAll ? "default" : "outline"} className={p.hasVotedAll ? "bg-primary/20 text-primary border-primary/30" : ""}>
-                        {p.hasVotedAll ? "You have voted" : `${p.votedSeats ?? 0}/${p.totalSeatsForUser ?? 0} seats voted`}
+                      <Badge
+                        variant={p.hasVotedAll ? "default" : "outline"}
+                        className={
+                          p.hasVotedAll
+                            ? "bg-primary/20 text-primary border-primary/30"
+                            : ""
+                        }
+                      >
+                        {p.hasVotedAll
+                          ? "You have voted"
+                          : `${p.votedSeats ?? 0}/${p.totalSeatsForUser ?? 0} seats voted`}
                       </Badge>
                     </div>
                   )}
@@ -187,7 +253,9 @@ export default function Home() {
                     </Link>
                   ) : p.status === "active" ? (
                     p.hasVotedAll ? (
-                      <Button variant="outline" className="w-full" disabled>You have voted</Button>
+                      <Button variant="outline" className="w-full" disabled>
+                        You have voted
+                      </Button>
                     ) : (
                       <Link href={`/vote/${p.id}`} className="w-full">
                         <Button className="w-full gap-1">

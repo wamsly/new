@@ -19,12 +19,21 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 export async function applyCandidate(req: Request, res: Response) {
-  const { pollId, seatId, manifesto, slogan, bio } = (req.body ?? {}) as Record<string, string>;
+  const { pollId, seatId, manifesto, slogan, bio } = (req.body ?? {}) as Record<
+    string,
+    string
+  >;
   if (!pollId || !seatId || !manifesto) {
-    res.status(400).json({ message: "pollId, seatId and manifesto are required" });
+    res
+      .status(400)
+      .json({ message: "pollId, seatId and manifesto are required" });
     return;
   }
-  const pollRows = await db.select().from(pollsTable).where(eq(pollsTable.id, pollId)).limit(1);
+  const pollRows = await db
+    .select()
+    .from(pollsTable)
+    .where(eq(pollsTable.id, pollId))
+    .limit(1);
   const poll = pollRows[0];
   if (!poll) {
     res.status(404).json({ message: "Poll not found" });
@@ -37,7 +46,12 @@ export async function applyCandidate(req: Request, res: Response) {
     .limit(1);
   const settings = appSettings[0];
   if (!settings || !settings.isOpen) {
-    res.status(400).json({ message: "The application window for this poll is currently closed. Please wait until the admin opens it." });
+    res
+      .status(400)
+      .json({
+        message:
+          "The application window for this poll is currently closed. Please wait until the admin opens it.",
+      });
     return;
   }
   if (settings.closeAt && new Date() > settings.closeAt) {
@@ -51,16 +65,79 @@ export async function applyCandidate(req: Request, res: Response) {
   const seatRows = await db
     .select()
     .from(pollSeatsTable)
-    .where(and(eq(pollSeatsTable.id, seatId), eq(pollSeatsTable.pollId, pollId)))
+    .where(
+      and(eq(pollSeatsTable.id, seatId), eq(pollSeatsTable.pollId, pollId)),
+    )
     .limit(1);
-  if (!seatRows[0]) {
+  const seat = seatRows[0];
+  if (!seat) {
     res.status(400).json({ message: "Seat does not belong to this poll" });
+    return;
+  }
+
+  // Enforce school/hostel restrictions for candidates
+  const userRows = await db
+    .select({
+      hostelId: usersTable.hostelId,
+      courseId: usersTable.courseId,
+      departmentId: coursesTable.departmentId,
+      schoolId: departmentsTable.schoolId,
+    })
+    .from(usersTable)
+    .leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id))
+    .leftJoin(
+      departmentsTable,
+      eq(coursesTable.departmentId, departmentsTable.id),
+    )
+    .where(eq(usersTable.id, req.user!.id))
+    .limit(1);
+  const user = userRows[0];
+
+  if (
+    seat.scope === "school" &&
+    seat.scopeRefId &&
+    user?.schoolId !== seat.scopeRefId
+  ) {
+    res
+      .status(403)
+      .json({ message: "You can only apply for seats within your own school" });
+    return;
+  }
+  if (
+    seat.scope === "hostel" &&
+    seat.scopeRefId &&
+    user?.hostelId !== seat.scopeRefId
+  ) {
+    res
+      .status(403)
+      .json({
+        message: "You can only apply for seats within your assigned hostel",
+      });
+    return;
+  }
+  if (seat.scope === "non-residential" && user?.hostelId !== null) {
+    res
+      .status(403)
+      .json({
+        message: "Only non-residential students can apply for this seat",
+      });
+    return;
+  }
+  if (seat.scope === "residential" && user?.hostelId === null) {
+    res
+      .status(403)
+      .json({ message: "Only residential students can apply for this seat" });
     return;
   }
   const exists = await db
     .select()
     .from(candidatesTable)
-    .where(and(eq(candidatesTable.seatId, seatId), eq(candidatesTable.userId, req.user!.id)))
+    .where(
+      and(
+        eq(candidatesTable.seatId, seatId),
+        eq(candidatesTable.userId, req.user!.id),
+      ),
+    )
     .limit(1);
   if (exists[0]) {
     res.status(409).json({ message: "You have already applied for this seat" });
@@ -68,7 +145,15 @@ export async function applyCandidate(req: Request, res: Response) {
   }
   const inserted = await db
     .insert(candidatesTable)
-    .values({ pollId, seatId, userId: req.user!.id, manifesto, slogan: slogan ?? null, bio: bio ?? null, status: "pending" })
+    .values({
+      pollId,
+      seatId,
+      userId: req.user!.id,
+      manifesto,
+      slogan: slogan ?? null,
+      bio: bio ?? null,
+      status: "pending",
+    })
     .returning();
   await audit({
     action: "candidate.apply",
@@ -76,20 +161,30 @@ export async function applyCandidate(req: Request, res: Response) {
     actorRole: "student",
     target: seatId,
   });
-  res.status(201).json({ id: inserted[0].id, message: "Application submitted" });
+  res
+    .status(201)
+    .json({ id: inserted[0].id, message: "Application submitted" });
 }
 
 export async function uploadCandidateDocument(req: Request, res: Response) {
   const { candidateId } = req.params;
-  const { documentName, documentType, fileData, fileName } = (req.body ?? {}) as Record<string, string>;
+  const { documentName, documentType, fileData, fileName } = (req.body ??
+    {}) as Record<string, string>;
   if (!documentName || !fileData || !fileName) {
-    res.status(400).json({ message: "documentName, fileData and fileName are required" });
+    res
+      .status(400)
+      .json({ message: "documentName, fileData and fileName are required" });
     return;
   }
   const candRows = await db
     .select()
     .from(candidatesTable)
-    .where(and(eq(candidatesTable.id, candidateId), eq(candidatesTable.userId, req.user!.id)))
+    .where(
+      and(
+        eq(candidatesTable.id, candidateId),
+        eq(candidatesTable.userId, req.user!.id),
+      ),
+    )
     .limit(1);
   if (!candRows[0]) {
     res.status(404).json({ message: "Candidate application not found" });
@@ -117,7 +212,9 @@ export async function uploadCandidateDocument(req: Request, res: Response) {
     target: candidateId,
     details: documentName,
   });
-  res.status(201).json({ id: inserted[0].id, documentUrl, message: "Document uploaded" });
+  res
+    .status(201)
+    .json({ id: inserted[0].id, documentUrl, message: "Document uploaded" });
 }
 
 export async function getMyApplications(req: Request, res: Response) {
@@ -176,7 +273,11 @@ export async function getMyApplications(req: Request, res: Response) {
 
 export async function endorseCandidate(req: Request, res: Response) {
   const { candidateId } = req.params;
-  const candRows = await db.select().from(candidatesTable).where(eq(candidatesTable.id, candidateId)).limit(1);
+  const candRows = await db
+    .select()
+    .from(candidatesTable)
+    .where(eq(candidatesTable.id, candidateId))
+    .limit(1);
   const candidate = candRows[0];
   if (!candidate) {
     res.status(404).json({ message: "Candidate not found" });
@@ -193,7 +294,9 @@ export async function endorseCandidate(req: Request, res: Response) {
     )
     .limit(1);
   if (exists[0]) {
-    res.status(409).json({ message: "You have already endorsed a candidate for this seat" });
+    res
+      .status(409)
+      .json({ message: "You have already endorsed a candidate for this seat" });
     return;
   }
   await db.insert(endorsementsTable).values({
@@ -218,7 +321,13 @@ export async function getApplicationSettings(req: Request, res: Response) {
     .where(eq(electionApplicationSettingsTable.pollId, pollId))
     .limit(1);
   if (!rows[0]) {
-    res.json({ pollId, isOpen: false, openAt: null, closeAt: null, timerDurationMinutes: null });
+    res.json({
+      pollId,
+      isOpen: false,
+      openAt: null,
+      closeAt: null,
+      timerDurationMinutes: null,
+    });
     return;
   }
   const r = rows[0];

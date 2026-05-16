@@ -283,8 +283,7 @@ export default function RegisterPage() {
                   Create your KUVOTE account
                 </CardTitle>
                 <CardDescription>
-                  Enter your KU registration number. Your details will be
-                  verified and auto-filled from the university database.
+                  Enter your KU registration number.
                 </CardDescription>
               </CardHeader>
 
@@ -490,7 +489,7 @@ export default function RegisterPage() {
                               {hostelDisplayName}
                             </span>
                             <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                              From DB
+                              ss
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground">
@@ -552,8 +551,6 @@ export default function RegisterPage() {
                                 </p>
                               </div>
                             )}
-
-                            {/* Requirements checklist */}
                             {showPasswordChecks && password.length > 0 && (
                               <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                                 {pwStrength.checks.map((c) => (

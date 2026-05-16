@@ -12,18 +12,22 @@ import {
   departmentsTable,
 } from "@workspace/db";
 import { and, asc, count, desc, eq } from "drizzle-orm";
-import { audit } from "../lib/audit";
+import { audit } from "../lib/audit.js";
 
 type PollStatus = "upcoming" | "active" | "closed";
 
 function statusOf(p: { startDate: Date; endDate: Date }): PollStatus {
+  // Use EAT (UTC+3) for comparison
   const now = new Date();
-  if (now < p.startDate) return "upcoming";
-  if (now > p.endDate) return "closed";
+  if (now.getTime() < p.startDate.getTime()) return "upcoming";
+  if (now.getTime() > p.endDate.getTime()) return "closed";
   return "active";
 }
 
-async function userVotedSeats(pollId: string, userId: string): Promise<Set<string>> {
+async function userVotedSeats(
+  pollId: string,
+  userId: string,
+): Promise<Set<string>> {
   const rows = await db
     .select({ seatId: ballotTokensTable.seatId })
     .from(ballotTokensTable)
@@ -38,7 +42,10 @@ async function userVotedSeats(pollId: string, userId: string): Promise<Set<strin
 }
 
 async function eligibleSeatsForUser(pollId: string, userId: string) {
-  const seats = await db.select().from(pollSeatsTable).where(eq(pollSeatsTable.pollId, pollId));
+  const seats = await db
+    .select()
+    .from(pollSeatsTable)
+    .where(eq(pollSeatsTable.pollId, pollId));
   const userRows = await db
     .select({
       id: usersTable.id,
@@ -50,19 +57,29 @@ async function eligibleSeatsForUser(pollId: string, userId: string) {
     })
     .from(usersTable)
     .leftJoin(coursesTable, eq(usersTable.courseId, coursesTable.id))
-    .leftJoin(departmentsTable, eq(coursesTable.departmentId, departmentsTable.id))
+    .leftJoin(
+      departmentsTable,
+      eq(coursesTable.departmentId, departmentsTable.id),
+    )
     .where(eq(usersTable.id, userId))
     .limit(1);
   const user = userRows[0];
   if (!user) return [];
   return seats.filter((s) => {
     if (s.gender && user.gender && s.gender !== user.gender) return false;
-    if (s.scope === "school" && s.scopeRefId && user.schoolId !== s.scopeRefId) return false;
-    if (s.scope === "department" && s.scopeRefId && user.departmentId !== s.scopeRefId) return false;
-    if (s.scope === "hostel" && s.scopeRefId && user.hostelId !== s.scopeRefId) return false;
-    // Non-residential: only off-campus students (no hostel assigned) may vote
+    if (s.scope === "school" && s.scopeRefId && user.schoolId !== s.scopeRefId)
+      return false;
+    if (
+      s.scope === "department" &&
+      s.scopeRefId &&
+      user.departmentId !== s.scopeRefId
+    )
+      return false;
+    if (s.scope === "hostel" && s.scopeRefId && user.hostelId !== s.scopeRefId)
+      return false;
+    // Non-residential: only off-campus students (no hostel assigned) may vote for their leader
     if (s.scope === "non-residential" && user.hostelId !== null) return false;
-    // Residential: only students assigned to any hostel may vote
+    // Residential: only students assigned to any hostel may vote for residential leaders
     if (s.scope === "residential" && user.hostelId === null) return false;
     return true;
   });
@@ -70,7 +87,10 @@ async function eligibleSeatsForUser(pollId: string, userId: string) {
 
 export async function getActivePublicPolls(_req: Request, res: Response) {
   const now = new Date();
-  const polls = await db.select().from(pollsTable).orderBy(desc(pollsTable.startDate));
+  const polls = await db
+    .select()
+    .from(pollsTable)
+    .orderBy(desc(pollsTable.startDate));
   const out = polls
     .filter((p) => p.startDate <= now && p.endDate >= now)
     .map((p) => ({
@@ -86,7 +106,10 @@ export async function getActivePublicPolls(_req: Request, res: Response) {
 }
 
 export async function getPolls(req: Request, res: Response) {
-  const polls = await db.select().from(pollsTable).orderBy(desc(pollsTable.startDate));
+  const polls = await db
+    .select()
+    .from(pollsTable)
+    .orderBy(desc(pollsTable.startDate));
   const out = await Promise.all(
     polls.map(async (p) => {
       const status = statusOf(p);
@@ -118,8 +141,12 @@ export async function getPolls(req: Request, res: Response) {
 }
 
 export async function getPoll(req: Request, res: Response) {
-  const { pollId } = req.params;
-  const pollRows = await db.select().from(pollsTable).where(eq(pollsTable.id, pollId)).limit(1);
+  const pollId = req.params.pollId as string;
+  const pollRows = await db
+    .select()
+    .from(pollsTable)
+    .where(eq(pollsTable.id, pollId))
+    .limit(1);
   const poll = pollRows[0];
   if (!poll) {
     res.status(404).json({ message: "Poll not found" });
@@ -129,9 +156,19 @@ export async function getPoll(req: Request, res: Response) {
   const eligibleSeats =
     req.user!.role === "student"
       ? await eligibleSeatsForUser(pollId, req.user!.id)
-      : await db.select().from(pollSeatsTable).where(eq(pollSeatsTable.pollId, pollId));
-  const votedSet = req.user!.role === "student" ? await userVotedSeats(pollId, req.user!.id) : new Set<string>();
-  const allSeats = await db.select().from(pollSeatsTable).where(eq(pollSeatsTable.pollId, pollId)).orderBy(asc(pollSeatsTable.position));
+      : await db
+          .select()
+          .from(pollSeatsTable)
+          .where(eq(pollSeatsTable.pollId, pollId));
+  const votedSet =
+    req.user!.role === "student"
+      ? await userVotedSeats(pollId, req.user!.id)
+      : new Set<string>();
+  const allSeats = await db
+    .select()
+    .from(pollSeatsTable)
+    .where(eq(pollSeatsTable.pollId, pollId))
+    .orderBy(asc(pollSeatsTable.position));
 
   const seatsWithCandidates = await Promise.all(
     allSeats.map(async (s) => {
@@ -146,12 +183,22 @@ export async function getPoll(req: Request, res: Response) {
         })
         .from(candidatesTable)
         .leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id))
-        .where(and(eq(candidatesTable.seatId, s.id), eq(candidatesTable.status, "approved")));
+        .where(
+          and(
+            eq(candidatesTable.seatId, s.id),
+            eq(candidatesTable.status, "approved"),
+          ),
+        );
       return {
         id: s.id,
         code: s.code,
         label: s.label,
-        scope: s.scope as "school" | "department" | "hostel" | "src" | "university",
+        scope: s.scope as
+          | "school"
+          | "department"
+          | "hostel"
+          | "src"
+          | "university",
         scopeRefId: s.scopeRefId ?? null,
         gender: (s.gender as "male" | "female" | null) ?? null,
         eligible: isEligible,
@@ -180,28 +227,43 @@ export async function getPoll(req: Request, res: Response) {
 export async function castVote(req: Request, res: Response) {
   const { pollId } = req.params;
   const { selections } = (req.body ?? {}) as {
-    selections: Array<{ seatId: string; candidateId: string; encryptedPayload: string }>;
+    selections: Array<{
+      seatId: string;
+      candidateId: string;
+      encryptedPayload: string;
+    }>;
   };
   if (!Array.isArray(selections) || selections.length === 0) {
     res.status(400).json({ message: "At least one selection is required" });
     return;
   }
-  const pollRows = await db.select().from(pollsTable).where(eq(pollsTable.id, pollId)).limit(1);
+  const pollRows = await db
+    .select()
+    .from(pollsTable)
+    .where(eq(pollsTable.id, pollId as string))
+    .limit(1);
   const poll = pollRows[0];
   if (!poll) {
     res.status(404).json({ message: "Poll not found" });
     return;
   }
   if (statusOf(poll) !== "active" || poll.locked) {
-    res.status(400).json({ message: "Voting is not currently open for this poll" });
+    res
+      .status(400)
+      .json({ message: "Voting is not currently open for this poll" });
     return;
   }
-  const eligibleSeats = await eligibleSeatsForUser(pollId, req.user!.id);
+  const eligibleSeats = await eligibleSeatsForUser(
+    pollId as string,
+    req.user!.id,
+  );
   const eligibleIds = new Set(eligibleSeats.map((s) => s.id));
 
   for (const sel of selections) {
     if (!eligibleIds.has(sel.seatId)) {
-      res.status(403).json({ message: "Not eligible for one of the selected seats" });
+      res
+        .status(403)
+        .json({ message: "Not eligible for one of the selected seats" });
       return;
     }
     const existingToken = await db
@@ -209,7 +271,7 @@ export async function castVote(req: Request, res: Response) {
       .from(ballotTokensTable)
       .where(
         and(
-          eq(ballotTokensTable.pollId, pollId),
+          eq(ballotTokensTable.pollId, pollId as string),
           eq(ballotTokensTable.seatId, sel.seatId),
           eq(ballotTokensTable.userId, req.user!.id),
           eq(ballotTokensTable.used, true),
@@ -217,7 +279,11 @@ export async function castVote(req: Request, res: Response) {
       )
       .limit(1);
     if (existingToken[0]) {
-      res.status(409).json({ message: "You have already voted for one of the seats in this poll" });
+      res
+        .status(409)
+        .json({
+          message: "You have already voted for one of the seats in this poll",
+        });
       return;
     }
     const candRows = await db
@@ -232,7 +298,9 @@ export async function castVote(req: Request, res: Response) {
       )
       .limit(1);
     if (!candRows[0]) {
-      res.status(400).json({ message: "Selected candidate is not valid for this seat" });
+      res
+        .status(400)
+        .json({ message: "Selected candidate is not valid for this seat" });
       return;
     }
   }
@@ -240,13 +308,16 @@ export async function castVote(req: Request, res: Response) {
   const recorded: string[] = [];
   for (const sel of selections) {
     const tokenRaw = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(tokenRaw).digest("hex");
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(tokenRaw)
+      .digest("hex");
     const ballotHash = crypto
       .createHash("sha256")
       .update(`${tokenRaw}|${sel.candidateId}|${sel.seatId}|${pollId}`)
       .digest("hex");
     await db.insert(ballotTokensTable).values({
-      pollId,
+      pollId: pollId as string,
       seatId: sel.seatId,
       userId: req.user!.id,
       tokenHash,
@@ -254,7 +325,7 @@ export async function castVote(req: Request, res: Response) {
       usedAt: new Date(),
     });
     await db.insert(votesTable).values({
-      pollId,
+      pollId: pollId as string,
       seatId: sel.seatId,
       candidateId: sel.candidateId,
       encryptedPayload: sel.encryptedPayload,
@@ -267,15 +338,22 @@ export async function castVote(req: Request, res: Response) {
     action: "vote.cast",
     actorEmail: req.user!.email,
     actorRole: "student",
-    target: pollId,
+    target: pollId as string,
     details: `seats=${recorded.length}`,
   });
-  res.json({ message: "Your vote has been recorded successfully", recordedSeats: recorded });
+  res.json({
+    message: "Your vote has been recorded successfully",
+    recordedSeats: recorded,
+  });
 }
 
 export async function getPollResults(req: Request, res: Response) {
-  const { pollId } = req.params;
-  const pollRows = await db.select().from(pollsTable).where(eq(pollsTable.id, pollId)).limit(1);
+  const pollId = req.params.pollId as string;
+  const pollRows = await db
+    .select()
+    .from(pollsTable)
+    .where(eq(pollsTable.id, pollId))
+    .limit(1);
   const poll = pollRows[0];
   if (!poll) {
     res.status(404).json({ message: "Poll not found" });
@@ -286,7 +364,11 @@ export async function getPollResults(req: Request, res: Response) {
     res.status(403).json({ message: "Results are not yet available" });
     return;
   }
-  const seats = await db.select().from(pollSeatsTable).where(eq(pollSeatsTable.pollId, pollId)).orderBy(asc(pollSeatsTable.position));
+  const seats = await db
+    .select()
+    .from(pollSeatsTable)
+    .where(eq(pollSeatsTable.pollId, pollId as string))
+    .orderBy(asc(pollSeatsTable.position));
   const seatResults = await Promise.all(
     seats.map(async (s) => {
       const candidates = await db
@@ -296,19 +378,32 @@ export async function getPollResults(req: Request, res: Response) {
         })
         .from(candidatesTable)
         .leftJoin(usersTable, eq(candidatesTable.userId, usersTable.id))
-        .where(and(eq(candidatesTable.seatId, s.id), eq(candidatesTable.status, "approved")));
+        .where(
+          and(
+            eq(candidatesTable.seatId, s.id),
+            eq(candidatesTable.status, "approved"),
+          ),
+        );
       const counts = await Promise.all(
         candidates.map(async (c) => {
           const r = await db
             .select({ n: count() })
             .from(votesTable)
-            .where(and(eq(votesTable.seatId, s.id), eq(votesTable.candidateId, c.id)));
+            .where(
+              and(
+                eq(votesTable.seatId, s.id),
+                eq(votesTable.candidateId, c.id),
+              ),
+            );
           return { id: c.id, name: c.name ?? "", votes: Number(r[0]?.n ?? 0) };
         }),
       );
       const totalForSeat = counts.reduce((acc, c) => acc + c.votes, 0);
       const winner = counts.length
-        ? counts.reduce((best, c) => (c.votes > best.votes ? c : best), counts[0])
+        ? counts.reduce(
+            (best, c) => (c.votes > best.votes ? c : best),
+            counts[0],
+          )
         : null;
       return {
         seatId: s.id,

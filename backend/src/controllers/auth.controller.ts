@@ -30,14 +30,21 @@ function addMonths(date: Date, months: number): Date {
 
 function validatePasswordStrength(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters long";
-  if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter (A-Z)";
-  if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter (a-z)";
-  if (!/[0-9]/.test(password)) return "Password must contain at least one number (0-9)";
-  if (!/[^A-Za-z0-9]/.test(password)) return "Password must contain at least one special character (e.g. !@#$%^&*)";
+  if (!/[A-Z]/.test(password))
+    return "Password must contain at least one uppercase letter (A-Z)";
+  if (!/[a-z]/.test(password))
+    return "Password must contain at least one lowercase letter (a-z)";
+  if (!/[0-9]/.test(password))
+    return "Password must contain at least one number (0-9)";
+  if (!/[^A-Za-z0-9]/.test(password))
+    return "Password must contain at least one special character (e.g. !@#$%^&*)";
   return null;
 }
 
-async function issueOtp(email: string, purpose: "registration" | "password_reset") {
+async function issueOtp(
+  email: string,
+  purpose: "registration" | "password_reset",
+) {
   const code = generateOtp();
   const codeHash = hashOtp(code);
   const expiresAt = new Date(Date.now() + OTP_TTL_MS);
@@ -81,14 +88,21 @@ async function consumeOtp(
 // GET /auth/prefill?regNumber=J31/4338/2022
 // Looks up the university student_records table — the single source of truth.
 export async function prefillRegistration(req: Request, res: Response) {
-  const regNumberParam = (req.query.regNumber as string ?? "").trim().toUpperCase();
+  const regNumberParam = ((req.query.regNumber as string) ?? "")
+    .trim()
+    .toUpperCase();
 
   if (!regNumberParam) {
     res.status(400).json({ message: "regNumber query parameter is required" });
     return;
   }
   if (!REG_NUMBER_REGEX.test(regNumberParam)) {
-    res.status(400).json({ message: "Invalid registration number format. Expected J31/4338/2022 or J31S/4338/2022" });
+    res
+      .status(400)
+      .json({
+        message:
+          "Invalid registration number format. Expected J31/4338/2022 or J31S/4338/2022",
+      });
     return;
   }
 
@@ -139,17 +153,27 @@ export async function prefillRegistration(req: Request, res: Response) {
 }
 
 export async function register(req: Request, res: Response) {
-  const { password, registrationNumber, hostelId } = (req.body ?? {}) as Record<string, string>;
+  const { password, registrationNumber, hostelId } = (req.body ?? {}) as Record<
+    string,
+    string
+  >;
 
   if (!registrationNumber) {
-    res.status(400).json({ message: "Registration number is required to register" });
+    res
+      .status(400)
+      .json({ message: "Registration number is required to register" });
     return;
   }
 
   const regNo = registrationNumber.trim().toUpperCase();
 
   if (!REG_NUMBER_REGEX.test(regNo)) {
-    res.status(400).json({ message: "Registration number must be in the format J31/4338/2022 or J31S/4338/2022" });
+    res
+      .status(400)
+      .json({
+        message:
+          "Registration number must be in the format J31/4338/2022 or J31S/4338/2022",
+      });
     return;
   }
 
@@ -175,7 +199,8 @@ export async function register(req: Request, res: Response) {
 
   if (!student) {
     res.status(403).json({
-      message: "Your registration number is not in the KU student database. Please contact the Registrar's Office.",
+      message:
+        "Your registration number is not in the KU student database. Please contact the Registrar's Office.",
       code: "NOT_IN_DATABASE",
     });
     return;
@@ -201,7 +226,12 @@ export async function register(req: Request, res: Response) {
   const existing = existingRows[0];
 
   if (existing?.status === "active") {
-    res.status(409).json({ message: "An account with this registration number already exists. Please sign in." });
+    res
+      .status(409)
+      .json({
+        message:
+          "An account with this registration number already exists. Please sign in.",
+      });
     return;
   }
 
@@ -239,7 +269,12 @@ export async function register(req: Request, res: Response) {
   }
 
   const otp = await issueOtp(email, "registration");
-  await audit({ action: "user.register", actorEmail: email, actorRole: "student", target: email });
+  await audit({
+    action: "user.register",
+    actorEmail: email,
+    actorRole: "student",
+    target: email,
+  });
   res.status(201).json({
     message: "Verification code sent to your university email",
     email,
@@ -258,16 +293,32 @@ export async function verifyOtp(req: Request, res: Response) {
     res.status(400).json({ message: "Invalid or expired code" });
     return;
   }
-  const userRows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  const userRows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
   const user = userRows[0];
   if (!user) {
     res.status(404).json({ message: "User not found" });
     return;
   }
-  await db.update(usersTable).set({ status: "active" }).where(eq(usersTable.id, user.id));
-  const token = signToken({ sub: user.id, email: user.email, role: user.role as any });
+  await db
+    .update(usersTable)
+    .set({ status: "active" })
+    .where(eq(usersTable.id, user.id));
+  const token = signToken({
+    sub: user.id,
+    email: user.email,
+    role: user.role as any,
+  });
   const profile = await loadUserProfile(user.id);
-  await audit({ action: "user.verify", actorEmail: email, actorRole: "student", target: email });
+  await audit({
+    action: "user.verify",
+    actorEmail: email,
+    actorRole: "student",
+    target: email,
+  });
   res.json({ token, user: profile });
 }
 
@@ -277,7 +328,9 @@ export async function resendOtp(req: Request, res: Response) {
     res.status(400).json({ message: "email required" });
     return;
   }
-  const purposeBody = (req.body?.purpose ?? "registration") as "registration" | "password_reset";
+  const purposeBody = (req.body?.purpose ?? "registration") as
+    | "registration"
+    | "password_reset";
   const otp = await issueOtp(email, purposeBody);
   res.json({ message: "Code sent", devOtp: otp.devOtp });
 }
@@ -323,11 +376,18 @@ export async function login(req: Request, res: Response) {
     return;
   }
   if (user.status === "disabled") {
-    res.status(403).json({ message: "Your account has been disabled. Contact the Electoral Commission." });
+    res
+      .status(403)
+      .json({
+        message:
+          "Your account has been disabled. Contact the Electoral Commission.",
+      });
     return;
   }
   if (user.registrationExpiresAt && user.registrationExpiresAt < new Date()) {
-    res.status(403).json({ message: "Your registration has expired. Please re-register." });
+    res
+      .status(403)
+      .json({ message: "Your registration has expired. Please re-register." });
     return;
   }
 
@@ -336,7 +396,9 @@ export async function login(req: Request, res: Response) {
     const studentRows = await db
       .select({ feeBalance: studentRecordsTable.feeBalance })
       .from(studentRecordsTable)
-      .where(eq(studentRecordsTable.registrationNumber, user.registrationNumber))
+      .where(
+        eq(studentRecordsTable.registrationNumber, user.registrationNumber),
+      )
       .limit(1);
     const student = studentRows[0];
     if (student) {
@@ -351,9 +413,18 @@ export async function login(req: Request, res: Response) {
     }
   }
 
-  const token = signToken({ sub: user.id, email: user.email, role: user.role as any });
+  const token = signToken({
+    sub: user.id,
+    email: user.email,
+    role: user.role as any,
+  });
   const profile = await loadUserProfile(user.id);
-  await audit({ action: "user.login", actorEmail: user.email, actorRole: user.role, target: user.email });
+  await audit({
+    action: "user.login",
+    actorEmail: user.email,
+    actorRole: user.role,
+    target: user.email,
+  });
   res.json({ token, user: profile });
 }
 
@@ -363,7 +434,11 @@ export async function adminLogin(req: Request, res: Response) {
     res.status(400).json({ message: "email and password are required" });
     return;
   }
-  const userRows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  const userRows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
   const user = userRows[0];
   if (!user || user.role !== "admin") {
     res.status(401).json({ message: "Invalid admin credentials" });
@@ -375,7 +450,12 @@ export async function adminLogin(req: Request, res: Response) {
   }
   const token = signToken({ sub: user.id, email: user.email, role: "admin" });
   const profile = await loadUserProfile(user.id);
-  await audit({ action: "admin.login", actorEmail: user.email, actorRole: "admin", target: user.email });
+  await audit({
+    action: "admin.login",
+    actorEmail: user.email,
+    actorRole: "admin",
+    target: user.email,
+  });
   res.json({ token, user: profile });
 }
 
@@ -385,20 +465,38 @@ export async function forgotPassword(req: Request, res: Response) {
     res.status(400).json({ message: "email required" });
     return;
   }
-  const userRows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  const userRows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
   if (!userRows[0]) {
-    res.json({ message: "If an account exists, a code has been sent", devOtp: null });
+    res.json({
+      message: "If an account exists, a code has been sent",
+      devOtp: null,
+    });
     return;
   }
   const otp = await issueOtp(email, "password_reset");
-  await audit({ action: "user.forgot_password", actorEmail: email, actorRole: "student", target: email });
+  await audit({
+    action: "user.forgot_password",
+    actorEmail: email,
+    actorRole: "student",
+    target: email,
+  });
   res.json({ message: "Reset code sent", devOtp: otp.devOtp });
 }
 
 export async function resetPassword(req: Request, res: Response) {
-  const { email, otp: code, newPassword } = (req.body ?? {}) as Record<string, string>;
+  const {
+    email,
+    otp: code,
+    newPassword,
+  } = (req.body ?? {}) as Record<string, string>;
   if (!email || !code || !newPassword) {
-    res.status(400).json({ message: "email, otp and newPassword are required" });
+    res
+      .status(400)
+      .json({ message: "email, otp and newPassword are required" });
     return;
   }
   const pwError = validatePasswordStrength(newPassword);
@@ -415,7 +513,12 @@ export async function resetPassword(req: Request, res: Response) {
     .update(usersTable)
     .set({ passwordHash: hashPassword(newPassword) })
     .where(eq(usersTable.email, email));
-  await audit({ action: "user.reset_password", actorEmail: email, actorRole: "student", target: email });
+  await audit({
+    action: "user.reset_password",
+    actorEmail: email,
+    actorRole: "student",
+    target: email,
+  });
   res.json({ message: "Password reset successfully" });
 }
 

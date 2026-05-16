@@ -90,9 +90,11 @@ export default function AdminPollsPage() {
 
     const formatForInput = (dateStr: string) => {
       if (!dateStr) return "";
+      // To show the correct time in the input field (which expects local time),
+      // we manually add 3 hours to the UTC date to get the EAT wall-clock time.
       const date = new Date(dateStr);
-      const offset = date.getTimezoneOffset() * 60000;
-      return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+      const eatTime = new Date(date.getTime() + 3 * 60 * 60 * 1000);
+      return eatTime.toISOString().slice(0, 16);
     };
 
     setEditStart(formatForInput(p.startDate));
@@ -108,8 +110,12 @@ export default function AdminPollsPage() {
         data: {
           title: editTitle,
           description: editDescription,
-          startDate: new Date(editStart).toISOString(),
-          endDate: new Date(editEnd).toISOString(),
+          startDate: new Date(
+            new Date(editStart).getTime() - 3 * 60 * 60 * 1000,
+          ).toISOString(),
+          endDate: new Date(
+            new Date(editEnd).getTime() - 3 * 60 * 60 * 1000,
+          ).toISOString(),
         },
       });
       toast.success("Poll updated");

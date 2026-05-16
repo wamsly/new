@@ -16,8 +16,8 @@ import {
   hostelsTable,
 } from "@workspace/db";
 import { and, count, desc, eq, gte, lte, isNotNull } from "drizzle-orm";
-import { hashPassword } from "../lib/auth";
-import { audit } from "../lib/audit";
+import { hashPassword } from "../lib/auth.js";
+import { audit } from "../lib/audit.js";
 
 export async function getDashboard(_req: Request, res: Response) {
   const now = new Date();
@@ -134,11 +134,9 @@ export async function createPoll(req: Request, res: Response) {
     !Array.isArray(seats) ||
     seats.length === 0
   ) {
-    res
-      .status(400)
-      .json({
-        message: "title, startDate, endDate and at least one seat are required",
-      });
+    res.status(400).json({
+      message: "title, startDate, endDate and at least one seat are required",
+    });
     return;
   }
   const start = new Date(startDate);
@@ -196,7 +194,7 @@ export async function updatePoll(req: Request, res: Response) {
   const existing = await db
     .select()
     .from(pollsTable)
-    .where(eq(pollsTable.id, pollId))
+    .where(eq(pollsTable.id, pollId as string))
     .limit(1);
   if (!existing[0]) {
     res.status(404).json({ message: "Poll not found" });
@@ -213,12 +211,15 @@ export async function updatePoll(req: Request, res: Response) {
     const e = new Date(endDate);
     if (!Number.isNaN(e.getTime())) updates.endDate = e;
   }
-  await db.update(pollsTable).set(updates).where(eq(pollsTable.id, pollId));
+  await db
+    .update(pollsTable)
+    .set(updates)
+    .where(eq(pollsTable.id, pollId as string));
   await audit({
     action: "admin.update_poll",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: pollId,
+    target: pollId as string,
     details: title ?? "updated",
   });
   res.json({ message: "Poll updated" });
@@ -234,22 +235,26 @@ export async function deletePoll(req: Request, res: Response) {
         db
           .select({ id: candidatesTable.id })
           .from(candidatesTable)
-          .where(eq(candidatesTable.pollId, pollId))
+          .where(eq(candidatesTable.pollId, pollId as string))
           .limit(1) as any,
       ),
     )
     .catch(() => {});
-  await db.delete(candidatesTable).where(eq(candidatesTable.pollId, pollId));
-  await db.delete(pollSeatsTable).where(eq(pollSeatsTable.pollId, pollId));
+  await db
+    .delete(candidatesTable)
+    .where(eq(candidatesTable.pollId, pollId as string));
+  await db
+    .delete(pollSeatsTable)
+    .where(eq(pollSeatsTable.pollId, pollId as string));
   await db
     .delete(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId));
-  await db.delete(pollsTable).where(eq(pollsTable.id, pollId));
+    .where(eq(electionApplicationSettingsTable.pollId, pollId as string));
+  await db.delete(pollsTable).where(eq(pollsTable.id, pollId as string));
   await audit({
     action: "admin.delete_poll",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: pollId,
+    target: pollId as string,
   });
   res.json({ message: "Poll deleted" });
 }
@@ -259,12 +264,12 @@ export async function lockPoll(req: Request, res: Response) {
   await db
     .update(pollsTable)
     .set({ locked: true })
-    .where(eq(pollsTable.id, pollId));
+    .where(eq(pollsTable.id, pollId as string));
   await audit({
     action: "admin.lock_poll",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: pollId,
+    target: pollId as string,
   });
   res.json({ message: "Poll locked" });
 }
@@ -274,12 +279,12 @@ export async function unlockPoll(req: Request, res: Response) {
   await db
     .update(pollsTable)
     .set({ locked: false })
-    .where(eq(pollsTable.id, pollId));
+    .where(eq(pollsTable.id, pollId as string));
   await audit({
     action: "admin.unlock_poll",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: pollId,
+    target: pollId as string,
   });
   res.json({ message: "Poll unlocked" });
 }
@@ -292,7 +297,7 @@ export async function openApplicationWindow(req: Request, res: Response) {
   const pollRows = await db
     .select()
     .from(pollsTable)
-    .where(eq(pollsTable.id, pollId))
+    .where(eq(pollsTable.id, pollId as string))
     .limit(1);
   if (!pollRows[0]) {
     res.status(404).json({ message: "Poll not found" });
@@ -305,7 +310,7 @@ export async function openApplicationWindow(req: Request, res: Response) {
   const existing = await db
     .select()
     .from(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId))
+    .where(eq(electionApplicationSettingsTable.pollId, pollId as string))
     .limit(1);
   if (existing[0]) {
     await db
@@ -318,10 +323,10 @@ export async function openApplicationWindow(req: Request, res: Response) {
         openedBy: req.user!.id,
         updatedAt: now,
       })
-      .where(eq(electionApplicationSettingsTable.pollId, pollId));
+      .where(eq(electionApplicationSettingsTable.pollId, pollId as string));
   } else {
     await db.insert(electionApplicationSettingsTable).values({
-      pollId,
+      pollId: pollId as string,
       isOpen: true,
       openAt: now,
       closeAt: closeAt,
@@ -334,7 +339,7 @@ export async function openApplicationWindow(req: Request, res: Response) {
     action: "admin.open_application_window",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: pollId,
+    target: pollId as string,
     details: timerDurationMinutes
       ? `timer=${timerDurationMinutes}min`
       : "no timer",
@@ -351,7 +356,7 @@ export async function closeApplicationWindow(req: Request, res: Response) {
   const existing = await db
     .select()
     .from(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId))
+    .where(eq(electionApplicationSettingsTable.pollId, pollId as string))
     .limit(1);
   if (existing[0]) {
     await db
@@ -362,10 +367,10 @@ export async function closeApplicationWindow(req: Request, res: Response) {
         closedBy: req.user!.id,
         updatedAt: now,
       })
-      .where(eq(electionApplicationSettingsTable.pollId, pollId));
+      .where(eq(electionApplicationSettingsTable.pollId, pollId as string));
   } else {
     await db.insert(electionApplicationSettingsTable).values({
-      pollId,
+      pollId: pollId as string,
       isOpen: false,
       closeAt: now,
       closedBy: req.user!.id,
@@ -376,7 +381,7 @@ export async function closeApplicationWindow(req: Request, res: Response) {
     action: "admin.close_application_window",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: pollId,
+    target: pollId as string,
   });
   res.json({ message: "Application window closed" });
 }
@@ -386,7 +391,7 @@ export async function getApplicationSettings(req: Request, res: Response) {
   const rows = await db
     .select()
     .from(electionApplicationSettingsTable)
-    .where(eq(electionApplicationSettingsTable.pollId, pollId))
+    .where(eq(electionApplicationSettingsTable.pollId, pollId as string))
     .limit(1);
   if (!rows[0]) {
     res.json({
@@ -458,7 +463,7 @@ export async function removeVoter(req: Request, res: Response) {
   const userRows = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.id, userId))
+    .where(eq(usersTable.id, userId as string))
     .limit(1);
   if (!userRows[0]) {
     res.status(404).json({ message: "User not found" });
@@ -468,12 +473,12 @@ export async function removeVoter(req: Request, res: Response) {
     res.status(403).json({ message: "Cannot remove an admin user" });
     return;
   }
-  await db.delete(usersTable).where(eq(usersTable.id, userId));
+  await db.delete(usersTable).where(eq(usersTable.id, userId as string));
   await audit({
     action: "admin.remove_voter",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: userId,
+    target: userId as string,
     details: userRows[0].email,
   });
   res.json({ message: "Voter removed from the system" });
@@ -483,12 +488,12 @@ export async function approveUser(req: Request, res: Response) {
   await db
     .update(usersTable)
     .set({ status: "active" })
-    .where(eq(usersTable.id, req.params.userId));
+    .where(eq(usersTable.id, req.params.userId as string));
   await audit({
     action: "admin.approve_user",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: req.params.userId,
+    target: req.params.userId as string,
   });
   res.json({ message: "User approved" });
 }
@@ -497,12 +502,12 @@ export async function disableUser(req: Request, res: Response) {
   await db
     .update(usersTable)
     .set({ status: "disabled" })
-    .where(eq(usersTable.id, req.params.userId));
+    .where(eq(usersTable.id, req.params.userId as string));
   await audit({
     action: "admin.disable_user",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: req.params.userId,
+    target: req.params.userId as string,
   });
   res.json({ message: "User disabled" });
 }
@@ -511,12 +516,12 @@ export async function promoteUser(req: Request, res: Response) {
   await db
     .update(usersTable)
     .set({ role: "admin" })
-    .where(eq(usersTable.id, req.params.userId));
+    .where(eq(usersTable.id, req.params.userId as string));
   await audit({
     action: "admin.promote_user",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: req.params.userId,
+    target: req.params.userId as string,
   });
   res.json({ message: "User promoted to admin" });
 }
@@ -632,12 +637,12 @@ export async function approveCandidate(req: Request, res: Response) {
       reviewedBy: req.user!.id,
       reviewedAt: new Date(),
     })
-    .where(eq(candidatesTable.id, req.params.candidateId));
+    .where(eq(candidatesTable.id, req.params.candidateId as string));
   await audit({
     action: "admin.approve_candidate",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: req.params.candidateId,
+    target: req.params.candidateId as string,
   });
   res.json({ message: "Candidate approved" });
 }
@@ -652,12 +657,12 @@ export async function rejectCandidate(req: Request, res: Response) {
       reviewedBy: req.user!.id,
       reviewedAt: new Date(),
     })
-    .where(eq(candidatesTable.id, req.params.candidateId));
+    .where(eq(candidatesTable.id, req.params.candidateId as string));
   await audit({
     action: "admin.reject_candidate",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: req.params.candidateId,
+    target: req.params.candidateId as string,
     details: reason ?? null,
   });
   res.json({ message: "Candidate rejected" });
@@ -1129,13 +1134,13 @@ export async function resetAdminPassword(req: Request, res: Response) {
   }
   await db
     .update(usersTable)
-    .set({ passwordHash: hashPassword(newPassword) })
-    .where(eq(usersTable.id, userId));
+    .set({ passwordHash: await hashPassword(newPassword) })
+    .where(eq(usersTable.id, userId as string));
   await audit({
     action: "admin.reset_password",
     actorEmail: req.user!.email,
     actorRole: "admin",
-    target: userId,
+    target: userId as string,
   });
   res.json({ message: "Password reset successfully" });
 }

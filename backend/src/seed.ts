@@ -71,12 +71,14 @@ export async function seedCatalog(): Promise<void> {
   if (!existingAdmin[0]) {
     logger.info("Seeding default admin ...");
     // FIX: Await the password hashing
+    const initialPassword = process.env.INITIAL_ADMIN_PASSWORD;
+    if (!initialPassword)
+      throw new Error("INITIAL_ADMIN_PASSWORD must be set for seeding");
+
     await db.insert(usersTable).values({
       name: "KUVOTE Administrator",
       email: adminEmail,
-      passwordHash: await hashPassword(
-        process.env.INITIAL_ADMIN_PASSWORD ?? "Admin123",
-      ),
+      passwordHash: await hashPassword(initialPassword),
       role: "admin",
       status: "active",
     });
